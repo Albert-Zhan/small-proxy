@@ -68,7 +68,7 @@ func main() {
 		filePath, _ := filepath.Abs(os.Args[0])
 		cmd:=exec.Command(filePath,"-start")
 		cmd.Start()
-		ioutil.WriteFile("pid.pid", []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0666)
+		ioutil.WriteFile("hosts.pid", []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0666)
 		fmt.Println("start success")
 		os.Exit(0)
 	}
@@ -78,13 +78,13 @@ func main() {
 	}
 	//关闭守护进程
 	if *stop{
-		strb, _ := ioutil.ReadFile("pid.pid")
+		strb, _ := ioutil.ReadFile("hosts.pid")
 		var command *exec.Cmd
-		//windows系统特殊处理
+		//结束守护进程
 		if runtime.GOOS=="windows"{
-			command = exec.Command("tskill", string(strb))
+			command = exec.Command("taskkill","/pid",string(strb))
 		}else{
-			command = exec.Command("kill", string(strb))
+			command = exec.Command("kill","-9",string(strb))
 		}
 		command.Start()
 		fmt.Println("stop success")
