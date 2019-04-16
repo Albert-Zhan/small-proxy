@@ -1,14 +1,15 @@
-# proxy
-proxy是使用反向代理+内网穿透实现的域名式访问的内网穿透软件
-,类似花生壳和ngrok代理软件,可用于微信平台或者需要域名授权的开发中使用。  
-#### 使用教程
-请移步到我的个人博客:[懒人博客](http://www.5lazy.cn)
-#### 代码说明
-proxy是用Golang开发实现的,并且以Apache-2.0形式开源。  
-#### 代码分析
-##### 目录中有两个文件夹分别为hosts和proxy,两个文件夹作用如下  
-hosts:反向代理实现源码目录,目录中有两个文件hosts.go(反向代理实现代码)和hosts.conf(反向代理配置文件)。  
-proxy:内网穿透实现源码目录,目录中有两个文件server.go(内网穿透服务端实现代码)和client.go(内网穿透客户端实现代码)。
-#### 注意事项
-由于github上的目录与go的目录结构有一定冲突,不能使用go get
-命令进行安装,建议使用git下载或者手动下载放到项目中去,然后手动执行go build hosts.go进行开发测试
+small-proxy
+=======
+[![License](https://img.shields.io/badge/license-apache2-blue.svg)](LICENSE)
+
+**small-proxy是使用反向代理+TCP隧道实现的域名式访问内网穿透,类似花生壳和ngrok代理软件,可用于微信平台和需要域名授权的开发中使用。**
+
+
+
+## 注意事项
+
+由于github上的目录与go的目录结构有一定冲突,不能使用go get命令进行安装,建议使用git下载或者手动下载放到项目中去,然后手动执行go build进行编译。
+
+## License
+
+Apache License Version 2.0 see http://www.apache.org/licenses/LICENSE-2.0.html
