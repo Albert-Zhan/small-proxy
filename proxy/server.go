@@ -3,40 +3,37 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
+	"os/exec"
 	"runtime"
 	"time"
-	"io/ioutil"
-	"os/exec"
-	"path/filepath"
 )
 
-var start *bool=flag.Bool("start",false,"server start")
-var stop *bool=flag.Bool("stop",false,"server stop")
-var guard *bool=flag.Bool("d",false,"Daemon start")
-var localPort *string = flag.String("l", "", "user visit port")
-var remotePort *string = flag.String("r", "", "and client communication port")
+var start *bool=flag.Bool("start",false,"Start server.")
+var stop *bool=flag.Bool("stop",false,"Stop server.")
+var guard *bool=flag.Bool("d",false,"Start Daemon.")
+var localPort *string = flag.String("l", "5531", "Ports accessed by users.")
+var remotePort *string = flag.String("r", "2001", "Port to communicate with client.")
 
-//与client相关的conn
+//与客户端相关的连接
 type client struct {
 	conn net.Conn
 	er   chan bool
 	//未收到心跳包通道
 	heart chan bool
-	//暂未使用！！！原功能tcp连接已经接通，不在需要心跳包
-	disheart bool
-	writ     chan bool
-	recv     chan []byte
-	send     chan []byte
+	writ  chan bool
+	recv  chan []byte
+	send  chan []byte
 }
 
-//读取client过来的数据
+//读取客户端发送过来的数据
 func (self *client) read() {
 	for {
 		//40秒没有数据传输则断开
-		self.conn.SetReadDeadline(time.Now().Add(time.Second * 40))
-		var recv []byte = make([]byte, 10240)
+		_ = self.conn.SetReadDeadline(time.Now().Add(40*time.Second))
+		var recv=make([]byte,10240)
 		n, err := self.conn.Read(recv)
 		if err != nil {
 			self.heart <- true
@@ -45,27 +42,27 @@ func (self *client) read() {
 		}
 		//收到心跳包hh，原样返回回复
 		if recv[0] == 'h' && recv[1] == 'h' {
-			self.conn.Write([]byte("hh"))
+			_, _ = self.conn.Write([]byte("hh"))
 			continue
 		}
 		self.recv <- recv[:n]
 	}
 }
 
-//把数据发送给client
+//把数据发送给客户端
 func (self client) write() {
 	for {
-		var send []byte = make([]byte, 10240)
+		var send=make([]byte,10240)
 		select {
 		case send = <-self.send:
-			self.conn.Write(send)
+			_, _ = self.conn.Write(send)
 		case <-self.writ:
 			break
 		}
 	}
 }
 
-//与user相关的conn
+//与用户相关的连接
 type user struct {
 	conn net.Conn
 	er   chan bool
@@ -74,13 +71,13 @@ type user struct {
 	send chan []byte
 }
 
-//读取user过来的数据
+//读取用户发送过来的数据
 func (self user) read() {
-	self.conn.SetReadDeadline(time.Now().Add(time.Millisecond * 800))
+	_ = self.conn.SetReadDeadline(time.Now().Add(800*time.Millisecond))
 	for {
-		var recv []byte = make([]byte, 10240)
+		var recv = make([]byte,10240)
 		n, err := self.conn.Read(recv)
-		self.conn.SetReadDeadline(time.Time{})
+		_ = self.conn.SetReadDeadline(time.Time{})
 		if err != nil {
 			self.er <- true
 			self.writ <- true
@@ -90,13 +87,13 @@ func (self user) read() {
 	}
 }
 
-//把数据发送给user
+//把数据发送给用户
 func (self user) write() {
 	for {
-		var send []byte = make([]byte, 10240)
+		var send=make([]byte,10240)
 		select {
 		case send = <-self.send:
-			self.conn.Write(send)
+			_, _ = self.conn.Write(send)
 		case <-self.writ:
 			break
 		}
@@ -109,12 +106,16 @@ func main() {
 	flag.Parse()
 	//开启守护进程
 	if *start && *guard{
-		filePath, _ := filepath.Abs(os.Args[0])
-		cmd:=exec.Command(filePath,"-start","-r",*remotePort,"-l",*localPort)
-		cmd.Start()
-		ioutil.WriteFile("proxy.pid", []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0666)
-		fmt.Println("start success")
-		os.Exit(0)
+		cmd:=exec.Command(os.Args[0],"-start","-r",*remotePort,"-l",*localPort)
+		err:=cmd.Start()
+		if err!=nil {
+			fmt.Println(err.Error())
+			os.Exit(2)
+		}
+		
+		_ = ioutil.WriteFile("./proxy.pid", []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0666)
+		fmt.Println("Start success.")
+		os.Exit(2)
 	}
 	//开启进程
 	if *start{
@@ -122,19 +123,25 @@ func main() {
 	}
 	//关闭守护进程
 	if *stop{
-		strb, _ := ioutil.ReadFile("proxy.pid")
+		b, _ := ioutil.ReadFile("./proxy.pid")
 		var command *exec.Cmd
 		//结束守护进程
 		if runtime.GOOS=="windows"{
-			command = exec.Command("taskkill","/pid",string(strb))
+			command = exec.Command("taskkill","/F","/PID",string(b))
 		}else{
-			command = exec.Command("kill","-9",string(strb))
+			command = exec.Command("kill","-9",string(b))
 		}
-		command.Start()
-		fmt.Println("stop success")
-		os.Exit(0)
+		err:=command.Start()
+		if err!=nil {
+			fmt.Println(err.Error())
+			os.Exit(2)
+		}
+
+		_ = os.Remove("./proxy.pid")
+		fmt.Println("Stop success.")
+		os.Exit(2)
 	}
-	fmt.Println("Please input parameters")
+	fmt.Println("Please input parameters.")
 }
 
 //开启内网穿透服务
@@ -150,20 +157,19 @@ func startServer()  {
 	log(err)
 	//第一条tcp关闭或者与浏览器建立tcp都要返回重新监听
 TOP:
-//监听user链接
+	//监听用户连接
 	Uconn := make(chan net.Conn)
 	go goaccept(u, Uconn)
 	//一定要先接受client
 	fmt.Println("准备好连接了")
 	clientconnn := accept(c)
-	fmt.Println("client已连接", clientconnn.LocalAddr().String())
 	recv := make(chan []byte)
 	send := make(chan []byte)
 	heart := make(chan bool, 1)
 	//1个位置是为了防止两个读取线程一个退出后另一个永远卡住
 	er := make(chan bool, 1)
 	writ := make(chan bool)
-	client := &client{clientconnn, er, heart, false, writ, recv, send}
+	client := &client{clientconnn, er, heart, writ, recv, send}
 	go client.read()
 	go client.write()
 	//这里可能需要处理心跳
@@ -172,8 +178,6 @@ TOP:
 		case <-client.heart:
 			goto TOP
 		case userconnn := <-Uconn:
-			//暂未使用
-			client.disheart = true
 			recv = make(chan []byte)
 			send = make(chan []byte)
 			//1个位置是为了防止两个读取线程一个退出后另一个永远卡住
@@ -235,12 +239,12 @@ func handle(client *client, user *user) {
 		case userrecv = <-user.recv:
 			client.send <- userrecv
 		case <-user.er:
-			client.conn.Close()
-			user.conn.Close()
+			_ = client.conn.Close()
+			_ = user.conn.Close()
 			runtime.Goexit()
 		case <-client.er:
-			user.conn.Close()
-			client.conn.Close()
+			_ = user.conn.Close()
+			_ = client.conn.Close()
 			runtime.Goexit()
 		}
 	}

@@ -1,19 +1,17 @@
 package main
 
 import (
-	"net/http"
+	"flag"
 	"fmt"
 	"hosts/conf"
-	"flag"
-	"strings"
-	"net/url"
+	"io/ioutil"
+	"net/http"
 	"net/http/httputil"
-	"log"
-	"runtime"
+	"net/url"
 	"os"
 	"os/exec"
-	"io/ioutil"
-	"path/filepath"
+	"runtime"
+	"strings"
 )
 
 var config conf.Config
@@ -22,10 +20,9 @@ type handle struct {
 
 }
 
-var start *bool=flag.Bool("start",false,"server start")
-var stop *bool=flag.Bool("stop",false,"server stop")
-var guard *bool=flag.Bool("d",false,"Daemon start")
-
+var start *bool=flag.Bool("start",false,"Start server.")
+var stop *bool=flag.Bool("stop",false,"Stop server.")
+var guard *bool=flag.Bool("d",false,"Start Daemon.")
 
 //反向代理服务实现方法
 func (this *handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +39,7 @@ func (this *handle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		proxy.ServeHTTP(w,r)
 	}else{
 		//当前请求的域名不在配置内
-		fmt.Fprintln(w,"502 Bad Gateway")
+		_, _ = fmt.Fprintln(w, "502 Bad Gateway")
 	}
 }
 
@@ -55,7 +52,8 @@ func startServer() {
 	h := &handle{}
 	err := http.ListenAndServe(":80", h)
 	if err != nil {
-		log.Fatalln("ListenAndServe: ", err)
+		fmt.Println(err.Error())
+		os.Exit(2)
 	}
 }
 
@@ -65,12 +63,16 @@ func main() {
 	flag.Parse()
 	//开启守护进程
 	if *start && *guard{
-		filePath, _ := filepath.Abs(os.Args[0])
-		cmd:=exec.Command(filePath,"-start")
-		cmd.Start()
-		ioutil.WriteFile("hosts.pid", []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0666)
-		fmt.Println("start success")
-		os.Exit(0)
+		cmd:=exec.Command(os.Args[0],"-start")
+		err:=cmd.Start()
+		if err!=nil {
+			fmt.Println(err.Error())
+			os.Exit(2)
+		}
+
+		_ = ioutil.WriteFile("./hosts.pid", []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0666)
+		fmt.Println("Start success.")
+		os.Exit(2)
 	}
 	//开启进程
 	if *start{
@@ -78,17 +80,23 @@ func main() {
 	}
 	//关闭守护进程
 	if *stop{
-		strb, _ := ioutil.ReadFile("hosts.pid")
+		b, _ := ioutil.ReadFile("./hosts.pid")
 		var command *exec.Cmd
 		//结束守护进程
 		if runtime.GOOS=="windows"{
-			command = exec.Command("taskkill","/pid",string(strb))
+			command = exec.Command("taskkill","/F","/PID",string(b))
 		}else{
-			command = exec.Command("kill","-9",string(strb))
+			command = exec.Command("kill","-9",string(b))
 		}
-		command.Start()
-		fmt.Println("stop success")
-		os.Exit(0)
+		err:=command.Start()
+		if err!=nil {
+			fmt.Println(err.Error())
+			os.Exit(2)
+		}
+
+		_ = os.Remove("./hosts.pid")
+		fmt.Println("Stop success.")
+		os.Exit(2)
 	}
-	fmt.Println("Please input parameters")
+	fmt.Println("Please input parameters.")
 }

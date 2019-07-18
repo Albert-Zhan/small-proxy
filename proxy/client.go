@@ -3,24 +3,23 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 	"time"
-	"path/filepath"
-	"os/exec"
-	"io/ioutil"
 )
 
-var start *bool=flag.Bool("start",false,"server start")
-var stop *bool=flag.Bool("stop",false,"server stop")
-var guard *bool=flag.Bool("d",false,"Daemon start")
-var host *string = flag.String("h", "", "server ip")
-var remotePort *string = flag.String("r", "", "server port")
-var localPort *string = flag.String("l", "", "local ip and port")
+var start *bool=flag.Bool("start",false,"Start server.")
+var stop *bool=flag.Bool("stop",false,"Stop server.")
+var guard *bool=flag.Bool("d",false,"Start Daemon.")
+var host *string = flag.String("h", "", "Server IP.")
+var remotePort *string = flag.String("r", "", "Server Port.")
+var localPort *string = flag.String("l", "127.0.0.1:80", "Local IP and Port.")
 
-//与browser相关的conn
+//与浏览器相关的连接
 type browser struct {
 	conn net.Conn
 	er   chan bool
@@ -29,10 +28,10 @@ type browser struct {
 	send chan []byte
 }
 
-//读取browser过来的数据
+//读取浏览器发送过来的数据
 func (self browser) read() {
 	for {
-		var recv []byte = make([]byte, 10240)
+		var recv=make([]byte,10240)
 		n, err := self.conn.Read(recv)
 		if err != nil {
 			self.writ <- true
@@ -43,20 +42,20 @@ func (self browser) read() {
 	}
 }
 
-//把数据发送给browser
+//把数据发送给浏览器
 func (self browser) write() {
 	for {
-		var send []byte = make([]byte, 10240)
+		var send=make([]byte, 10240)
 		select {
 		case send = <-self.send:
-			self.conn.Write(send)
+			_, _ = self.conn.Write(send)
 		case <-self.writ:
 			break
 		}
 	}
 }
 
-//与server相关的conn
+//与服务端相关的连接
 type server struct {
 	conn net.Conn
 	er   chan bool
@@ -65,24 +64,24 @@ type server struct {
 	send chan []byte
 }
 
-//读取server过来的数据
+//读取服务端发送过来的数据
 func (self *server) read() {
 	//isheart与timeout共同判断是不是自己设定的SetReadDeadline
-	var isheart bool = false
+	var isheart=false
 	//20秒发一次心跳包
-	self.conn.SetReadDeadline(time.Now().Add(time.Second * 20))
+	_ = self.conn.SetReadDeadline(time.Now().Add(20*time.Second))
 	for {
-		var recv []byte = make([]byte, 10240)
+		var recv=make([]byte,10240)
 		n, err := self.conn.Read(recv)
 		if err != nil {
 			if strings.Contains(err.Error(), "timeout") && !isheart {
-				self.conn.Write([]byte("hh"))
+				_, _ = self.conn.Write([]byte("hh"))
 				//4秒时间收心跳包
-				self.conn.SetReadDeadline(time.Now().Add(time.Second * 4))
+				_ = self.conn.SetReadDeadline(time.Now().Add(4*time.Second))
 				isheart = true
 				continue
 			}
-			//浏览器有可能连接上不发消息就断开，此时就发一个0，为了与服务器一直有一条tcp通路
+			//浏览器有可能连接上不发消息就断开，此时就发一个0，为了与服务器一直有一条tcp通道
 			self.recv <- []byte("0")
 			self.er <- true
 			self.writ <- true
@@ -90,7 +89,7 @@ func (self *server) read() {
 		}
 		//收到心跳包
 		if recv[0] == 'h' && recv[1] == 'h' {
-			self.conn.SetReadDeadline(time.Now().Add(time.Second * 20))
+			_ = self.conn.SetReadDeadline(time.Now().Add(time.Second * 20))
 			isheart = false
 			continue
 		}
@@ -98,13 +97,13 @@ func (self *server) read() {
 	}
 }
 
-//把数据发送给server
+//把数据发送给服务端
 func (self server) write() {
 	for {
-		var send []byte = make([]byte, 10240)
+		var send=make([]byte, 10240)
 		select {
 		case send = <-self.send:
-			self.conn.Write(send)
+			_, _ = self.conn.Write(send)
 		case <-self.writ:
 			break
 		}
@@ -117,12 +116,16 @@ func main() {
 	flag.Parse()
 	//开启守护进程
 	if *start && *guard{
-		filePath, _ := filepath.Abs(os.Args[0])
-		cmd:=exec.Command(filePath,"-start","-r",*remotePort,"-l",*localPort,"-h",*host)
-		cmd.Start()
-		ioutil.WriteFile("proxy.pid", []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0666)
-		fmt.Println("start success")
-		os.Exit(0)
+		cmd:=exec.Command(os.Args[0],"-start","-r",*remotePort,"-l",*localPort,"-h",*host)
+		err:=cmd.Start()
+		if err!=nil {
+			fmt.Println(err.Error())
+			os.Exit(2)
+		}
+
+		_ = ioutil.WriteFile("./proxy.pid", []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0666)
+		fmt.Println("Start success.")
+		os.Exit(2)
 	}
 	//开启进程
 	if *start{
@@ -130,23 +133,29 @@ func main() {
 	}
 	//关闭守护进程
 	if *stop{
-		strb, _ := ioutil.ReadFile("proxy.pid")
+		b,_:=ioutil.ReadFile("./proxy.pid")
 		var command *exec.Cmd
 		//结束守护进程
 		if runtime.GOOS=="windows"{
-			command = exec.Command("taskkill","/pid",string(strb))
+			command=exec.Command("taskkill","/F","/PID",string(b))
 		}else{
-			command = exec.Command("kill","-9",string(strb))
+			command=exec.Command("kill","-9",string(b))
 		}
-		command.Start()
-		fmt.Println("stop success")
-		os.Exit(0)
+		err:=command.Start()
+		if err!=nil {
+			fmt.Println(err.Error())
+			os.Exit(2)
+		}
+
+		_ = os.Remove("./proxy.pid")
+		fmt.Println("Stop success.")
+		os.Exit(2)
 	}
-	fmt.Println("Please input parameters")
+	fmt.Println("Please input parameters.")
 }
 
 //开启内网穿透服务
-func startServer()  {
+func startServer() {
 	if *localPort=="" || *remotePort=="" || *host==""{
 		flag.PrintDefaults()
 		os.Exit(1)
@@ -164,7 +173,7 @@ func startServer()  {
 		server := &server{serverconn, er, writ, recv, send}
 		go server.read()
 		go server.write()
-		go handle(server, next)
+		go handle(server,next)
 		<-next
 	}
 }
@@ -201,16 +210,13 @@ func dail(hostport string) net.Conn {
 
 //两个socket衔接相关处理
 func handle(server *server, next chan bool) {
-	var serverrecv = make([]byte, 10240)
-	//阻塞这里等待server传来数据再链接browser
+	var serverrecv=make([]byte,10240)
+	//阻塞这里等待服务端传来数据再链接浏览器
 	fmt.Println("等待server发来消息")
 	serverrecv = <-server.recv
-	//连接上，下一个tcp连上服务器
 	next <- true
-	//fmt.Println("开始新的tcp链接，发来的消息是：", string(serverrecv))
 	var browse *browser
-	//server发来数据，链接本地80端口
-	fmt.Println("server发来消息了")
+	//服务端发来数据，链接本地80端口
 	serverconn := dail(*localPort)
 	recv := make(chan []byte)
 	send := make(chan []byte)
@@ -231,12 +237,12 @@ func handle(server *server, next chan bool) {
 		case browserrecv = <-browse.recv:
 			server.send <- browserrecv
 		case <-server.er:
-			server.conn.Close()
-			browse.conn.Close()
+			_ = server.conn.Close()
+			_ = browse.conn.Close()
 			runtime.Goexit()
 		case <-browse.er:
-			server.conn.Close()
-			browse.conn.Close()
+			_ = server.conn.Close()
+			_ = browse.conn.Close()
 			runtime.Goexit()
 		}
 	}
