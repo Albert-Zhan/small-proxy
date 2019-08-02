@@ -6,11 +6,14 @@ small-proxy
 
 > ⚠ small-proxy目前只支持TCP和http代理,暂不支持其他协议。
 
+**OpenWrt/LEDE路由器使用可参考本篇文章:[OpenWrt/lede免费实现内网穿透](http://www.5lazy.cn/post-145.html)。**
+
 ## 特点
 
 - 域名式访问内网穿透
-- 跨平台(支持6大操作系统)
-- 易学习(代码量小)
+- 支持OpenWrt/LEDE
+- 跨平台(支持交叉编译)
+- 易学习(项目可单独拆分使用)
 
 ## 使用教程
 
