@@ -14,7 +14,7 @@ small-proxy
 
 ## 使用教程
 
-由于篇幅和图片偏多,请移步到本篇文章:[Golang实现的域名式访问内网穿透](http://www.5lazy.cn/post-138.html)。
+由于篇幅和图片偏多,请移步到本篇文章:[Golang实现的域名式访问内网穿透](http://www.5lazy.cn/post-145.html)。
 
 ## 注意事项
 
