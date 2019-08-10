@@ -25,7 +25,7 @@ func (this *start) printHelp(indent string) {
 
 func (this *start) run(args []string) {
 	if this.d==true {
-		cmd:=exec.Command(os.Args[0],"-start")
+		cmd:=exec.Command(os.Args[0],"start")
 		err:=cmd.Start()
 		if err!=nil {
 			fmt.Println(err.Error())

@@ -33,7 +33,7 @@ func (this *start) run(args []string) {
 	}
 
 	if this.d==true {
-		cmd:=exec.Command(os.Args[0],"-start","-l",this.local,"-r",this.remote)
+		cmd:=exec.Command(os.Args[0],"start","-l",this.local,"-r",this.remote)
 		err:=cmd.Start()
 		if err!=nil {
 			fmt.Println(err.Error())
