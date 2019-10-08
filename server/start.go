@@ -51,11 +51,11 @@ func (this *start) run(args []string) {
 //开启内网穿透
 func (this *start) startServer() {
 	//监听端口
-	c, err := net.Listen("tcp", ":"+this.remote)
+	c, err := net.Listen("tcp4", ":"+this.remote)
 	if err != nil {
 		fmt.Printf("出现错误： %v\n", err)
 	}
-	u, err := net.Listen("tcp", ":"+this.local)
+	u, err := net.Listen("tcp4", ":"+this.local)
 	if err != nil {
 		fmt.Printf("出现错误： %v\n", err)
 	}
